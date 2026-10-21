@@ -1,0 +1,19 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: jdbc:h2:file:./data/dbdesigner;AUTO_SERVER=TRUE
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:change-me-please-change-me-please-change-me-32bytes}
+    ttl-hours: 72
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
