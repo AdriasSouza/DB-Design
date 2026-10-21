@@ -2,6 +2,8 @@ package com.dbdesigner.web;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -48,5 +50,14 @@ public final class Dtos {
     }
 
     public record ImportRequest(@NotBlank String sql) {
+    }
+
+    public record JdbcImportRequest(@NotBlank String host,
+                                    @Min(1) @Max(65535) int port,
+                                    @NotBlank String service,
+                                    boolean sid,
+                                    @NotBlank String user,
+                                    @NotBlank String password,
+                                    String schema) {
     }
 }

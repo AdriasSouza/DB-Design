@@ -2,6 +2,16 @@ import type { DbType, Project, Schema, User } from './types';
 
 const TOKEN_KEY = 'token';
 
+export type OracleConnection = {
+  host: string;
+  port: number;
+  service: string;
+  sid: boolean;
+  user: string;
+  password: string;
+  schema: string;
+};
+
 export const auth = {
   get token() {
     return localStorage.getItem(TOKEN_KEY);
@@ -62,4 +72,5 @@ export const api = {
 
   ddl: (dbType: DbType, schema: Schema) => request<string>('/ddl', { method: 'POST', body: json({ dbType, schema }) }),
   importDdl: (sql: string) => request<Schema>('/import/ddl', { method: 'POST', body: json({ sql }) }),
+  importOracle: (conn: OracleConnection) => request<Schema>('/import/jdbc', { method: 'POST', body: json(conn) }),
 };

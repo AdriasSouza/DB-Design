@@ -18,7 +18,7 @@ import {
   type Edge,
 } from '@xyflow/react';
 import { toPng, toSvg } from 'html-to-image';
-import { api } from '../api';
+import { api, type OracleConnection } from '../api';
 import TableNode from '../components/TableNode';
 import TablePanel from '../components/TablePanel';
 import { autoLayout, columnOf, newTable, toEdges, toNodes, toSchema, uid } from '../schemaFlow';
@@ -176,7 +176,7 @@ function EditorInner() {
         <span className="spacer" />
         {!readOnly && <button className="btn" onClick={addTable}>+ Tabela</button>}
         {!readOnly && <button className="btn" onClick={arrange}>Auto-layout</button>}
-        {!readOnly && <button className="btn" onClick={() => setModal('import')}>Importar DDL</button>}
+        {!readOnly && <button className="btn" onClick={() => setModal('import')}>Importar</button>}
         {!readOnly && <button className="btn" onClick={() => setModal('ddl')}>Exportar DDL</button>}
         <button className="btn" onClick={() => exportImage('png')}>PNG</button>
         <button className="btn" onClick={() => exportImage('svg')}>SVG</button>
@@ -291,25 +291,67 @@ function DdlModal({ dbType, schema, name, onClose }: { dbType: DbType; schema: S
 }
 
 function ImportModal({ hasContent, onImport, onClose }: { hasContent: boolean; onImport: (s: Schema) => void; onClose: () => void }) {
+  const [tab, setTab] = useState<'ddl' | 'oracle'>('ddl');
   const [sql, setSql] = useState('');
+  const [conn, setConn] = useState<OracleConnection>({
+    host: '', port: 1521, service: '', sid: false, user: '', password: '', schema: '',
+  });
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
+  const setField = <K extends keyof OracleConnection>(key: K, value: OracleConnection[K]) =>
+    setConn((c) => ({ ...c, [key]: value }));
+  const ready = tab === 'ddl' ? !!sql.trim() : !!(conn.host && conn.service && conn.user && conn.password);
 
   async function run() {
     if (hasContent && !confirm('Isso substituirá o diagrama atual. Continuar?')) return;
+    setError('');
+    setBusy(true);
     try {
-      onImport(await api.importDdl(sql));
+      onImport(tab === 'ddl' ? await api.importDdl(sql) : await api.importOracle(conn));
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setBusy(false);
     }
   }
 
   return (
-    <ModalShell title="Importar DDL" onClose={onClose}>
-      <p className="muted">Cole scripts CREATE TABLE / ALTER TABLE … FOREIGN KEY (Oracle, MySQL ou PostgreSQL).</p>
-      <textarea value={sql} onChange={(e) => setSql(e.target.value)} rows={16} placeholder="CREATE TABLE ..." />
+    <ModalShell title="Importar" onClose={onClose}>
+      <div className="tabs">
+        <button className={tab === 'ddl' ? 'tab active' : 'tab'} onClick={() => setTab('ddl')}>Script DDL</button>
+        <button className={tab === 'oracle' ? 'tab active' : 'tab'} onClick={() => setTab('oracle')}>Banco Oracle</button>
+      </div>
+      {tab === 'ddl' ? (
+        <>
+          <p className="muted">Cole scripts CREATE TABLE / ALTER TABLE … FOREIGN KEY (Oracle, MySQL ou PostgreSQL).</p>
+          <textarea value={sql} onChange={(e) => setSql(e.target.value)} rows={16} placeholder="CREATE TABLE ..." />
+        </>
+      ) : (
+        <>
+          <p className="muted">
+            Lê tabelas, colunas e chaves do catálogo do Oracle. A senha é usada só nesta importação e não é armazenada.
+            Prefira um usuário somente leitura.
+          </p>
+          <div className="form-grid">
+            <label>Host<input value={conn.host} onChange={(e) => setField('host', e.target.value)} /></label>
+            <label>Porta<input type="number" value={conn.port} onChange={(e) => setField('port', Number(e.target.value))} /></label>
+            <label>
+              {conn.sid ? 'SID' : 'Service name'}
+              <input value={conn.service} onChange={(e) => setField('service', e.target.value)} />
+            </label>
+            <label className="check">
+              <input type="checkbox" checked={conn.sid} onChange={(e) => setField('sid', e.target.checked)} /> Usar SID
+            </label>
+            <label>Usuário<input value={conn.user} onChange={(e) => setField('user', e.target.value)} autoComplete="off" /></label>
+            <label>Senha<input type="password" value={conn.password} onChange={(e) => setField('password', e.target.value)} autoComplete="new-password" /></label>
+            <label>Schema (opcional)<input value={conn.schema} placeholder="padrão: o usuário" onChange={(e) => setField('schema', e.target.value)} /></label>
+          </div>
+        </>
+      )}
       {error && <div className="error">{error}</div>}
       <div className="modal-actions">
-        <button className="btn primary" disabled={!sql.trim()} onClick={run}>Importar</button>
+        <button className="btn primary" disabled={!ready || busy} onClick={run}>{busy ? 'Importando…' : 'Importar'}</button>
       </div>
     </ModalShell>
   );

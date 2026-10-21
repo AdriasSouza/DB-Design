@@ -4,10 +4,12 @@ import com.dbdesigner.domain.Project;
 import com.dbdesigner.domain.ProjectRepository;
 import com.dbdesigner.schema.DdlGenerator;
 import com.dbdesigner.schema.DdlImporter;
+import com.dbdesigner.schema.OracleReverseEngineer;
 import com.dbdesigner.schema.Schema;
 import com.dbdesigner.web.Dtos.CreateProjectRequest;
 import com.dbdesigner.web.Dtos.DdlRequest;
 import com.dbdesigner.web.Dtos.ImportRequest;
+import com.dbdesigner.web.Dtos.JdbcImportRequest;
 import com.dbdesigner.web.Dtos.ProjectDto;
 import com.dbdesigner.web.Dtos.ShareResponse;
 import com.dbdesigner.web.Dtos.UpdateProjectRequest;
@@ -30,6 +32,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.sql.SQLException;
 import java.util.List;
 import java.util.UUID;
 
@@ -43,13 +46,15 @@ public class ProjectController {
     private final ObjectMapper mapper;
     private final DdlGenerator ddlGenerator;
     private final DdlImporter ddlImporter;
+    private final OracleReverseEngineer oracleReverseEngineer;
 
-    public ProjectController(ProjectRepository projects, ObjectMapper mapper,
-                             DdlGenerator ddlGenerator, DdlImporter ddlImporter) {
+    public ProjectController(ProjectRepository projects, ObjectMapper mapper, DdlGenerator ddlGenerator,
+                             DdlImporter ddlImporter, OracleReverseEngineer oracleReverseEngineer) {
         this.projects = projects;
         this.mapper = mapper;
         this.ddlGenerator = ddlGenerator;
         this.ddlImporter = ddlImporter;
+        this.oracleReverseEngineer = oracleReverseEngineer;
     }
 
     @GetMapping("/projects")
@@ -144,6 +149,27 @@ public class ProjectController {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Nenhum CREATE TABLE encontrado");
         }
         return schema;
+    }
+
+    /** Engenharia reversa: a senha é usada só nesta requisição e nunca é armazenada nem registrada em log. */
+    @PostMapping("/import/jdbc")
+    public Schema importJdbc(@Valid @RequestBody JdbcImportRequest req) {
+        try {
+            return oracleReverseEngineer.read(new OracleReverseEngineer.Connect(
+                    req.host().trim(), req.port(), req.service().trim(), req.sid(),
+                    req.user().trim(), req.password(), req.schema()));
+        } catch (SQLException e) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "Falha ao ler o banco Oracle: " + firstLine(e.getMessage()));
+        }
+    }
+
+    private static String firstLine(String message) {
+        if (message == null) {
+            return "erro desconhecido";
+        }
+        int nl = message.indexOf('\n');
+        return nl < 0 ? message : message.substring(0, nl);
     }
 
     private Project owned(Long id, Long userId) {
